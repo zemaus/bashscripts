@@ -1,0 +1,27 @@
+#!/bin/bash
+
+zipname=$(echo "$1" | rev | cut -f 1 -d '/' | cut -f 2- -d '.' | rev )
+echo 'Checking archive for multiple files in root'
+IFS=$'\n'
+
+items=($(7z l -ba -slt $1 | grep -i "path" | awk '{ s = ""; for (i = 3; i <= NF; i++) s = s $i " "; print s }'))
+initial=$(echo ${items[0]} | cut -f 1 -d '/' | xargs)
+ismultiple="false"
+
+for ((i=0; i < ${#items[@]}; i++)); do
+    item=$(echo ${items[i]} | cut -f 1 -d '/' | xargs)
+    if [[ $initial != $item ]]; then
+        echo "not same '$initial' '$item'"
+        ismultiple="true"
+        break
+    fi
+done
+
+if [[ "$ismultiple" == "true" ]]; then
+    echo "Multiple files detected, creating a directory: $zipname"
+    mkdir -p $PWD/$zipname
+    7z x -o$PWD/$zipname $1
+else
+    echo "All files are packages neatly, extracting normally"
+    7z x $1
+fi

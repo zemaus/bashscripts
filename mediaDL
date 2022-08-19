@@ -1,0 +1,84 @@
+#!/bin/bash
+
+ytdlpMp4Arg="(bestvideo[vcodec^=av01][height>=1080][fps>30]/bestvideo[vcodec=vp9.2][height>=1080][fps>30]/bestvideo[vcodec=vp9][height>=1080][fps>30]/bestvideo[vcodec^=av01][height>=1080]/bestvideo[vcodec=vp9.2][height>=1080]/bestvideo[vcodec=vp9][height>=1080]/bestvideo[height>=1080]/bestvideo[vcodec^=av01][height>=720][fps>30]/bestvideo[vcodec=vp9.2][height>=720][fps>30]/bestvideo[vcodec=vp9][height>=720][fps>30]/bestvideo[vcodec^=av01][height>=720]/bestvideo[vcodec=vp9.2][height>=720]/bestvideo[vcodec=vp9][height>=720]/bestvideo[height>=720]/bestvideo)+(bestaudio[acodec=m4a]/bestaudio)/best"
+
+args=($@)
+
+link=""
+path="$PWD"
+fileDownload="vid"
+timestamp="false"
+timeStart=""
+timeEnd=""
+thumbnail=""
+mp3Args="--audio-quality 0 --audio-format mp3"
+
+for ((i=0; i <= ${#args[@]}; i++));
+do
+	if [[ "${args[i]}" == "--help" ]]; then
+        echo "--vid : download video (default)
+--audio : download audio only
+--mp3 : download final audio file as mp3
+--time : download in range of time (start end) (00:01:20 00:00:04)
+--thumbnail : embed thumbnail into final file
+-f : chosen format (vID+aID)
+-o : output path
+-i : input link "
+	exit
+
+	elif [[ "${args[i]}" == "-o" ]]; then
+		path="${args[i+1]}"
+
+    elif [[ "${args[i]}" == "-i" ]]; then
+        link="${args[i+1]}"
+
+    elif [[ "${args[i]}" == "-f" ]]; then
+        ytdlpMp4Arg="${args[i+1]}"
+
+    elif [[ "${args[i]}" == "--vid" ]];then
+		fileDownload="vid"
+
+	elif [[ "${args[i]}" == "--audio" ]];then
+		fileDownload="audio"
+
+	elif [[ "${args[i]}" == "--time" ]];then
+		timestamp="true"
+		timeStart="${args[i+1]}"
+		timeEnd="${args[i+2]}"
+
+	elif [[ "${args[i]}" == "--thumbnail" ]]; then
+		thumbnail="--embed-thumbnail"
+
+	elif [[ "${args[i]}" == "--mp3" ]]; then
+        mp3Args="--audio-quality 0 --audio-format mp3"
+
+	fi
+done
+
+if [[ $link == "" ]]; then
+    echo "Link missing, use -i" >&2
+    exit
+elif [[ ( $timestamp == "true" ) && ( $timeStart == "" || $timeEnd == "" ) ]]; then
+    echo "missing agrument for timestamp (start end) (00:01:20 00:00:04)"
+    exit
+fi
+exit
+segment=($(yt-dlp --youtube-skip-dash-manifest -g $link | tr " " "\n"))
+
+if [[ "$fileDownload" == "vid" ]]; then
+	if [[ "$timestamp" == "true" ]]; then
+		fileName=$(yt-dlp --get-filename -o "%(title)s.%(ext)s" $link)
+        ffmpeg -ss "$timeStart" -i "${segment[0]}" -ss "$timeStart" -i "${segment[1]}" -map 0:v -map 1:a -to "$timeEnd" -c copy "$path/$fileName"
+    else
+		yt-dlp --retries "infinite" -f "$ytdlpMp4Arg" $thumbnail -o "$path/%(title)s.%(ext)s" $link
+	fi
+
+elif [[ "$fileDownload" == "audio" ]]; then
+    if [[ "$timestamp" == "true" ]]; then
+		fileName=$(yt-dlp --get-filename -o "%(title)s.mp3" $link)
+        ffmpeg -ss "$timeStart" -i "${segment[1]}" -to "$timeEnd" -c mp3 "$path/$fileName"
+    else
+        yt-dlp -o "$path/%(title)s.%(ext)s" -x $thumbnail $mp3Args $link
+	fi
+
+fi
